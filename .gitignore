@@ -1,220 +1,393 @@
-# Byte-compiled / optimized / DLL files
-__pycache__/
-*.py[codz]
-*$py.class
+import streamlit as st
+import pandas as pd
+from datetime import datetime
+import json
 
-# C extensions
-*.so
+# ==================== НАСТРОЙКА СТРАНИЦЫ ====================
+st.set_page_config(
+    page_title="Калькулятор КБЖУ • СПКЯ / ИР",
+    page_icon="🥗",
+    layout="wide",
+)
 
-# Distribution / packaging
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-share/python-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
+# ==================== БАЗА ПРОДУКТОВ ====================
+# Формат: (калории, белки, жиры, углеводы, ГИ, категория)
+# ГИ: 1–55 низкий, 56–69 средний, 70+ высокий, 0 — не применимо
 
-# PyInstaller
-#   Usually these files are written by a python script from a template
-#   before PyInstaller builds the exe, so as to inject date/other infos into it.
-*.manifest
-*.spec
+FOOD_DB = {
+    # --- Мясо, птица, субпродукты ---
+    "Куриная грудка (варёная)": (165, 31.0, 3.6, 0, 0, "Белок"),
+    "Куриное бедро (варёное)": (209, 26.0, 10.9, 0, 0, "Белок"),
+    "Индейка (филе, варёное)": (189, 29.0, 7.0, 0, 0, "Белок"),
+    "Говядина (тушёная, нежирная)": (218, 32.0, 9.0, 0, 0, "Белок"),
+    "Свинина (нежирная, варёная)": (242, 27.0, 14.0, 0, 0, "Белок"),
+    "Телятина (варёная)": (172, 30.0, 5.0, 0, 0, "Белок"),
+    "Баранина (варёная)": (294, 25.0, 21.0, 0, 0, "Белок"),
+    "Кролик (варёный)": (183, 33.0, 5.5, 0, 0, "Белок"),
+    "Печень куриная (тушёная)": (166, 25.0, 6.0, 2.0, 0, "Белок"),
+    "Печень говяжья (тушёная)": (191, 28.0, 6.0, 4.0, 0, "Белок"),
+    "Сердце куриное (варёное)": (182, 26.0, 8.0, 0, 0, "Белок"),
+    "Желудки куриные (варёные)": (160, 21.0, 7.0, 0, 0, "Белок"),
+    "Колбаса варёная (Докторская)": (257, 12.8, 22.2, 1.5, 0, "Белок"),
+    "Сосиски молочные": (266, 11.0, 23.9, 1.6, 0, "Белок"),
+    "Бекон (жареный)": (541, 37.0, 42.0, 1.4, 0, "Белок"),
+    "Ветчина (нежирная)": (145, 18.0, 7.0, 1.0, 0, "Белок"),
 
-# Installer logs
-pip-log.txt
-pip-delete-this-directory.txt
+    # --- Рыба и морепродукты ---
+    "Треска (варёная)": (82, 18.0, 0.7, 0, 0, "Белок"),
+    "Минтай (варёный)": (72, 16.0, 0.9, 0, 0, "Белок"),
+    "Горбуша (запечённая)": (169, 22.0, 8.0, 0, 0, "Белок"),
+    "Кета (запечённая)": (184, 24.0, 9.0, 0, 0, "Белок"),
+    "Сельдь (солёная)": (217, 17.0, 16.0, 0, 0, "Белок"),
+    "Скумбрия (запечённая)": (262, 24.0, 18.0, 0, 0, "Белок"),
+    "Лосось (запечённый)": (208, 22.0, 13.0, 0, 0, "Белок"),
+    "Сардины (в масле)": (208, 25.0, 11.0, 0, 0, "Белок"),
+    "Тунец (в собственном соку)": (116, 26.0, 1.0, 0, 0, "Белок"),
+    "Креветки (варёные)": (99, 24.0, 0.3, 0.2, 0, "Белок"),
+    "Кальмар (варёный)": (92, 18.0, 2.0, 2.0, 0, "Белок"),
+    "Мидии (варёные)": (86, 12.0, 2.0, 3.0, 0, "Белок"),
+    "Икра красная": (263, 31.0, 15.0, 0, 0, "Белок"),
 
-# Unit test / coverage reports
-htmlcov/
-.tox/
-.nox/
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-*.py.cover
-*.lcov
-.hypothesis/
-.pytest_cache/
-cover/
+    # --- Яйца и молочные продукты ---
+    "Яйцо куриное (варёное)": (155, 13.0, 11.0, 1.1, 0, "Белок"),
+    "Яйцо перепелиное (варёное)": (168, 13.0, 12.0, 0.5, 0, "Белок"),
+    "Яичный белок (варёный)": (52, 11.0, 0.2, 0.7, 0, "Белок"),
+    "Яичный желток (варёный)": (322, 16.0, 27.0, 3.0, 0, "Белок"),
+    "Творог 5%": (121, 17.0, 5.0, 3.0, 0, "Белок"),
+    "Творог 9%": (159, 16.0, 9.0, 3.0, 0, "Белок"),
+    "Творог обезжиренный": (85, 18.0, 0.5, 3.0, 0, "Белок"),
+    "Греческий йогурт (2%)": (73, 10.0, 2.0, 4.0, 0, "Белок"),
+    "Йогурт натуральный (3.2%)": (66, 5.0, 3.2, 4.0, 0, "Белок"),
+    "Кефир 1%": (40, 3.0, 1.0, 4.0, 0, "Белок"),
+    "Ряженка 4%": (67, 3.0, 4.0, 5.0, 0, "Белок"),
+    "Молоко 2.5%": (52, 2.8, 2.5, 4.7, 0, "Белок"),
+    "Молоко обезжиренное": (34, 3.0, 0.1, 5.0, 0, "Белок"),
+    "Сыр твёрдый (Гауда, Чеддер)": (356, 25.0, 27.0, 2.0, 0, "Белок"),
+    "Сыр мягкий (Моцарелла, Бри)": (300, 22.0, 22.0, 1.0, 0, "Белок"),
+    "Сыр плавленый": (257, 15.0, 20.0, 2.0, 0, "Белок"),
+    "Сметана 15%": (158, 3.0, 15.0, 3.0, 0, "Белок"),
 
-# Translations
-*.mo
-*.pot
+    # --- Крупы, зерновые, макароны ---
+    "Овсянка на воде (готовая)": (88, 3.0, 1.5, 15.0, 40, "Углеводы"),
+    "Овсянка на молоке (готовая)": (102, 4.0, 3.0, 14.0, 45, "Углеводы"),
+    "Гречка (варёная)": (110, 4.0, 1.0, 21.0, 50, "Углеводы"),
+    "Рис белый (варёный)": (130, 2.7, 0.3, 28.0, 73, "Углеводы"),
+    "Рис бурый (варёный)": (111, 2.6, 0.9, 23.0, 50, "Углеводы"),
+    "Булгур (варёный)": (83, 3.0, 0.2, 19.0, 48, "Углеводы"),
+    "Киноа (варёная)": (120, 4.4, 1.9, 21.0, 53, "Углеводы"),
+    "Кукурузная крупа (варёная)": (86, 2.0, 0.6, 19.0, 70, "Углеводы"),
+    "Перловка (варёная)": (109, 3.0, 0.4, 22.0, 45, "Углеводы"),
+    "Пшено (варёное)": (119, 3.5, 1.0, 23.0, 60, "Углеводы"),
+    "Манка (варёная)": (80, 2.0, 0.2, 17.0, 70, "Углеводы"),
+    "Макароны из твёрдых сортов (варёные)": (131, 5.0, 1.0, 25.0, 55, "Углеводы"),
+    "Макароны из мягких сортов (варёные)": (140, 4.0, 0.5, 30.0, 70, "Углеводы"),
+    "Хлеб цельнозерновой": (247, 13.0, 3.4, 41.0, 45, "Углеводы"),
+    "Хлеб ржаной": (210, 6.0, 1.2, 42.0, 50, "Углеводы"),
+    "Хлеб белый (батон)": (260, 8.0, 3.0, 50.0, 75, "Углеводы"),
+    "Лаваш армянский": (277, 8.0, 1.2, 56.0, 70, "Углеводы"),
+    "Отруби пшеничные": (216, 15.0, 4.0, 30.0, 15, "Углеводы"),
 
-# Django stuff:
-*.log
-local_settings.py
-db.sqlite3
-db.sqlite3-journal
+    # --- Бобовые ---
+    "Чечевица (варёная)": (116, 9.0, 0.4, 20.0, 25, "Углеводы"),
+    "Фасоль красная (варёная)": (127, 8.7, 0.5, 23.0, 24, "Углеводы"),
+    "Фасоль белая (варёная)": (102, 6.0, 0.5, 18.0, 30, "Углеводы"),
+    "Горох (варёный)": (118, 8.0, 0.5, 21.0, 35, "Углеводы"),
+    "Нут (варёный)": (164, 8.9, 2.6, 27.0, 28, "Углеводы"),
+    "Соя (варёная)": (172, 16.0, 9.0, 10.0, 15, "Углеводы"),
+    "Тофу": (76, 8.0, 4.8, 1.9, 15, "Белок"),
 
-# Flask stuff:
-instance/
-.webassets-cache
+    # --- Овощи ---
+    "Брокколи (варёная)": (35, 2.4, 0.4, 7.0, 10, "Овощи"),
+    "Цветная капуста (варёная)": (25, 1.9, 0.3, 5.0, 15, "Овощи"),
+    "Шпинат (тушёный)": (23, 2.9, 0.3, 3.6, 15, "Овощи"),
+    "Капуста белокочанная": (25, 1.3, 0.1, 5.8, 15, "Овощи"),
+    "Капуста краснокочанная": (31, 1.4, 0.2, 7.0, 15, "Овощи"),
+    "Огурец свежий": (15, 0.7, 0.1, 3.6, 15, "Овощи"),
+    "Помидор свежий": (18, 0.9, 0.2, 3.9, 10, "Овощи"),
+    "Перец болгарский (красный)": (31, 1.0, 0.3, 6.0, 15, "Овощи"),
+    "Кабачок (тушёный)": (24, 0.6, 0.3, 5.0, 15, "Овощи"),
+    "Баклажан (тушёный)": (35, 0.8, 0.2, 8.0, 15, "Овощи"),
+    "Морковь сырая": (41, 0.9, 0.2, 9.6, 35, "Овощи"),
+    "Морковь варёная": (35, 0.8, 0.2, 8.0, 85, "Овощи"),
+    "Свёкла варёная": (44, 1.7, 0.2, 10.0, 65, "Овощи"),
+    "Лук репчатый": (40, 1.1, 0.1, 9.3, 15, "Овощи"),
+    "Чеснок": (149, 6.4, 0.5, 33.0, 30, "Овощи"),
+    "Спаржа (варёная)": (22, 2.4, 0.2, 3.9, 15, "Овощи"),
+    "Сельдерей (стебель)": (16, 0.7, 0.2, 3.0, 15, "Овощи"),
+    "Грибы шампиньоны (жареные)": (43, 3.0, 1.0, 5.0, 15, "Овощи"),
+    "Тыква (запечённая)": (26, 1.0, 0.1, 6.0, 75, "Овощи"),
 
-# Scrapy stuff:
-.scrapy
+    # --- Картофель и крахмалистые ---
+    "Картофель варёный": (87, 2.0, 0.1, 20.0, 80, "Углеводы"),
+    "Картофель запечённый": (93, 2.5, 0.1, 21.0, 85, "Углеводы"),
+    "Батат (запечённый)": (90, 2.0, 0.2, 21.0, 50, "Углеводы"),
+    "Кукуруза сладкая (варёная)": (96, 3.4, 1.5, 21.0, 60, "Углеводы"),
 
-# Sphinx documentation
-docs/_build/
+    # --- Фрукты и ягоды ---
+    "Яблоко свежее": (52, 0.3, 0.2, 14.0, 35, "Фрукты"),
+    "Груша свежая": (57, 0.4, 0.1, 15.0, 35, "Фрукты"),
+    "Банан свежий": (89, 1.1, 0.3, 23.0, 60, "Фрукты"),
+    "Апельсин свежий": (47, 0.9, 0.1, 12.0, 40, "Фрукты"),
+    "Мандарин свежий": (53, 0.8, 0.3, 13.0, 40, "Фрукты"),
+    "Грейпфрут свежий": (42, 0.8, 0.1, 11.0, 25, "Фрукты"),
+    "Виноград свежий": (69, 0.7, 0.2, 18.0, 55, "Фрукты"),
+    "Киви свежий": (61, 1.1, 0.5, 15.0, 50, "Фрукты"),
+    "Персик свежий": (39, 0.9, 0.3, 10.0, 35, "Фрукты"),
+    "Абрикос свежий": (48, 1.4, 0.4, 11.0, 35, "Фрукты"),
+    "Слива свежая": (46, 0.7, 0.3, 11.0, 35, "Фрукты"),
+    "Клубника свежая": (32, 0.7, 0.3, 7.7, 25, "Фрукты"),
+    "Малина свежая": (52, 1.2, 0.7, 12.0, 25, "Фрукты"),
+    "Черника свежая": (57, 0.7, 0.3, 14.0, 25, "Фрукты"),
+    "Смородина чёрная": (63, 1.4, 0.4, 15.0, 30, "Фрукты"),
+    "Клюква свежая": (46, 0.4, 0.1, 12.0, 45, "Фрукты"),
+    "Арбуз свежий": (30, 0.6, 0.2, 7.6, 75, "Фрукты"),
+    "Дыня свежая": (34, 0.8, 0.2, 8.0, 65, "Фрукты"),
+    "Авокадо свежий": (160, 2.0, 15.0, 9.0, 10, "Фрукты"),
 
-# PyBuilder
-.pybuilder/
-target/
+    # --- Орехи, семена ---
+    "Миндаль": (579, 21.0, 50.0, 22.0, 15, "Жиры"),
+    "Грецкий орех": (654, 15.0, 65.0, 14.0, 15, "Жиры"),
+    "Кешью": (553, 18.0, 44.0, 30.0, 22, "Жиры"),
+    "Фундук": (628, 15.0, 61.0, 17.0, 15, "Жиры"),
+    "Арахис": (567, 26.0, 49.0, 16.0, 15, "Жиры"),
+    "Семена чиа": (486, 17.0, 31.0, 42.0, 1, "Жиры"),
+    "Семена льна": (534, 18.0, 42.0, 29.0, 1, "Жиры"),
+    "Семена подсолнечника": (584, 21.0, 51.0, 20.0, 15, "Жиры"),
+    "Тыквенные семечки": (559, 30.0, 49.0, 11.0, 15, "Жиры"),
+    "Кунжут": (573, 17.0, 50.0, 23.0, 15, "Жиры"),
 
-# Jupyter Notebook
-.ipynb_checkpoints
+    # --- Жиры и масла ---
+    "Масло оливковое extra virgin": (884, 0, 100.0, 0, 0, "Жиры"),
+    "Масло подсолнечное": (884, 0, 100.0, 0, 0, "Жиры"),
+    "Масло кокосовое": (862, 0, 100.0, 0, 0, "Жиры"),
+    "Масло сливочное 82.5%": (748, 0.5, 82.5, 0.8, 0, "Жиры"),
+    "Сало свиное": (902, 2.0, 99.0, 0, 0, "Жиры"),
+    "Маргарин": (626, 0.2, 70.0, 0.5, 0, "Жиры"),
 
-# IPython
-profile_default/
-ipython_config.py
+    # --- Прочее, сладости, напитки ---
+    "Мёд натуральный": (304, 0.3, 0, 82.0, 55, "Углеводы"),
+    "Сахар-песок": (387, 0, 0, 100.0, 70, "Углеводы"),
+    "Шоколад тёмный (70%+)": (598, 7.8, 43.0, 46.0, 25, "Углеводы"),
+    "Шоколад молочный": (535, 7.6, 30.0, 59.0, 70, "Углеводы"),
+    "Печенье овсяное": (437, 6.5, 14.0, 71.0, 55, "Углеводы"),
+    "Вафли": (425, 3.2, 15.0, 68.0, 75, "Углеводы"),
+    "Мороженое пломбир": (227, 3.5, 15.0, 20.0, 60, "Углеводы"),
+    "Торт бисквитный": (350, 5.0, 15.0, 50.0, 75, "Углеводы"),
+    "Сок апельсиновый (свежевыжатый)": (45, 0.7, 0.2, 10.0, 50, "Напитки"),
+    "Сок яблочный (свежевыжатый)": (46, 0.1, 0.1, 11.0, 40, "Напитки"),
+    "Кола": (42, 0, 0, 10.6, 70, "Напитки"),
+    "Кофе чёрный без сахара": (2, 0.3, 0, 0, 0, "Напитки"),
+    "Чай чёрный без сахара": (1, 0, 0, 0.2, 0, "Напитки"),
+    "Какао на молоке (без сахара)": (67, 3.0, 2.5, 8.0, 40, "Напитки"),
+}
 
-# pyenv
-#   For a library or package, you might want to ignore these files since the code is
-#   intended to run in multiple environments; otherwise, check them in:
-# .python-version
+FOOD_LIST = sorted(FOOD_DB.keys())
 
-# pipenv
-#   According to pypa/pipenv#598, it is recommended to include Pipfile.lock in version control.
-#   However, in case of collaboration, if having platform-specific dependencies or dependencies
-#   having no cross-platform support, pipenv may install dependencies that don't work, or not
-#   install all needed dependencies.
-# Pipfile.lock
+# ==================== СОСТОЯНИЕ ====================
+if "meals" not in st.session_state:
+    st.session_state.meals = []
+if "goals" not in st.session_state:
+    st.session_state.goals = {
+        "calories": 1800,
+        "protein": 120,
+        "fat": 60,
+        "carbs": 180,
+        "fiber": 25,
+    }
 
-# uv
-#   Similar to Pipfile.lock, it is generally recommended to include uv.lock in version control.
-#   This is especially recommended for binary packages to ensure reproducibility, and is more
-#   commonly ignored for libraries.
-# uv.lock
+# ==================== БОКОВАЯ ПАНЕЛЬ ====================
+with st.sidebar:
+    st.header("⚙️ Настройки")
 
-# poetry
-#   Similar to Pipfile.lock, it is generally recommended to include poetry.lock in version control.
-#   This is especially recommended for binary packages to ensure reproducibility, and is more
-#   commonly ignored for libraries.
-#   https://python-poetry.org/docs/basic-usage/#commit-your-poetrylock-file-to-version-control
-# poetry.lock
-# poetry.toml
+    st.subheader("Цели на день")
+    st.session_state.goals["calories"] = st.number_input(
+        "Калории, ккал", 500, 6000, st.session_state.goals["calories"], 50)
+    st.session_state.goals["protein"] = st.number_input(
+        "Белки, г", 30, 400, st.session_state.goals["protein"], 5)
+    st.session_state.goals["fat"] = st.number_input(
+        "Жиры, г", 20, 300, st.session_state.goals["fat"], 5)
+    st.session_state.goals["carbs"] = st.number_input(
+        "Углеводы, г", 30, 500, st.session_state.goals["carbs"], 5)
+    st.session_state.goals["fiber"] = st.number_input(
+        "Клетчатка, г", 10, 60, st.session_state.goals["fiber"], 1)
 
-# pdm
-#   Similar to Pipfile.lock, it is generally recommended to include pdm.lock in version control.
-#   pdm recommends including project-wide configuration in pdm.toml, but excluding .pdm-python.
-#   https://pdm-project.org/en/latest/usage/project/#working-with-version-control
-# pdm.lock
-# pdm.toml
-.pdm-python
-.pdm-build/
+    st.divider()
+    st.subheader("Профиль")
+    st.checkbox("СПКЯ (синдром поликистозных яичников)", value=True, key="pcos")
+    st.checkbox("Инсулинорезистентность (ИР)", value=True, key="ir")
+    st.caption("При СПКЯ/ИР рекомендации ориентированы на низкий ГИ (≤55) и белок 25–30%.")
 
-# pixi
-#   Similar to Pipfile.lock, it is generally recommended to include pixi.lock in version control.
-# pixi.lock
-#   Pixi creates a virtual environment in the .pixi directory, just like venv module creates one
-#   in the .venv directory. It is recommended not to include this directory in version control.
-.pixi/*
-!.pixi/config.toml
+    st.divider()
+    if st.button("🧹 Очистить дневник", use_container_width=True):
+        st.session_state.meals = []
+        st.rerun()
 
-# PEP 582; used by e.g. github.com/David-OConnor/pyflow and github.com/pdm-project/pdm
-__pypackages__/
+    if st.session_state.meals:
+        data = {
+            "date": datetime.now().strftime("%Y-%m-%d"),
+            "meals": st.session_state.meals,
+        }
+        st.download_button(
+            "💾 Скачать дневник (JSON)",
+            data=json.dumps(data, ensure_ascii=False, indent=2),
+            file_name=f"kbzhu_{datetime.now().strftime('%Y-%m-%d')}.json",
+            mime="application/json",
+            use_container_width=True,
+        )
 
-# Celery stuff
-celerybeat-schedule*
-celerybeat.pid
+# ==================== ЗАГОЛОВОК ====================
+st.title("🥗 Калькулятор КБЖУ")
+st.caption("Отслеживание калорий, БЖУ и гликемического индекса • Поддержка СПКЯ и ИР")
 
-# Redis
-*.rdb
-*.aof
-*.pid
+# ==================== ДОБАВЛЕНИЕ ПРОДУКТА ====================
+st.subheader("➕ Добавить продукт")
 
-# RabbitMQ
-mnesia/
-rabbitmq/
-rabbitmq-data/
+col1, col2, col3 = st.columns([3, 1, 1])
+with col1:
+    selected = st.selectbox("Продукт", FOOD_LIST, index=0)
+with col2:
+    grams = st.number_input("Граммы", min_value=1.0, max_value=2000.0, value=100.0, step=10.0)
+with col3:
+    st.write("")
+    st.write("")
+    if st.button("Добавить", type="primary", use_container_width=True):
+        cal, p, f, c, gi, cat = FOOD_DB[selected]
+        k = grams / 100.0
+        st.session_state.meals.append({
+            "time": datetime.now().strftime("%H:%M"),
+            "product": selected,
+            "grams": grams,
+            "kcal": round(cal * k, 1),
+            "protein": round(p * k, 1),
+            "fat": round(f * k, 1),
+            "carbs": round(c * k, 1),
+            "gi": gi,
+            "category": cat,
+        })
+        st.rerun()
 
-# ActiveMQ
-activemq-data/
+cal, p, f, c, gi, cat = FOOD_DB[selected]
+gi_txt = f"ГИ: **{gi}**" if gi > 0 else "ГИ: —"
+st.info(
+    f"**{selected}** на 100 г → {cal} ккал • Б: {p} г • Ж: {f} г • У: {c} г • {gi_txt} • Категория: {cat}"
+)
 
-# SageMath parsed files
-*.sage.py
+st.divider()
 
-# Environments
-.env
-.envrc
-.venv
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
+# ==================== ИТОГИ ====================
+meals = st.session_state.meals
+total_cal = sum(m["kcal"] for m in meals)
+total_prot = sum(m["protein"] for m in meals)
+total_fat = sum(m["fat"] for m in meals)
+total_carb = sum(m["carbs"] for m in meals)
 
-# Spyder project settings
-.spyderproject
-.spyproject
+total_fiber = 0.0
+for m in meals:
+    if m["category"] in ("Овощи", "Фрукты"):
+        total_fiber += m["grams"] * 0.02
+    elif m["category"] == "Углеводы":
+        total_fiber += m["grams"] * 0.01
 
-# Rope project settings
-.ropeproject
+goals = st.session_state.goals
 
-# mkdocs/Zensical documentation
-/site
+st.subheader("📊 Итоги за день")
+m1, m2, m3, m4, m5 = st.columns(5)
+m1.metric("Калории", f"{total_cal:.0f}", f"{total_cal - goals['calories']:+.0f} ккал", delta_color="inverse")
+m2.metric("Белки", f"{total_prot:.0f} г", f"{total_prot - goals['protein']:+.0f} г")
+m3.metric("Жиры", f"{total_fat:.0f} г", f"{total_fat - goals['fat']:+.0f} г")
+m4.metric("Углеводы", f"{total_carb:.0f} г", f"{total_carb - goals['carbs']:+.0f} г")
+m5.metric("Клетчатка", f"{total_fiber:.0f} г", f"{total_fiber - goals['fiber']:+.0f} г")
 
-# mypy
-.mypy_cache/
-.dmypy.json
-dmypy.json
+progress = min(total_cal / goals["calories"], 1.0) if goals["calories"] else 0
+st.progress(progress, text=f"Калории: {total_cal:.0f} / {goals['calories']} ккал ({progress*100:.0f}%)")
 
-# Pyre type checker
-.pyre/
+st.divider()
 
-# pytype static type analyzer
-.pytype/
+# ==================== ДНЕВНИК ====================
+st.subheader("📋 Дневник питания")
 
-# Cython debug symbols
-cython_debug/
+if meals:
+    df = pd.DataFrame(meals)
+    df_display = df[["time", "product", "grams", "kcal", "protein", "fat", "carbs", "gi"]].rename(columns={
+        "time": "Время", "product": "Продукт", "grams": "г",
+        "kcal": "Ккал", "protein": "Б", "fat": "Ж", "carbs": "У", "gi": "ГИ"
+    })
+    st.dataframe(df_display, use_container_width=True, hide_index=True)
 
-# PyCharm
-#   JetBrains specific template is maintained in a separate JetBrains.gitignore that can
-#   be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
-#   and can be added to the global gitignore or merged into this file.  For a more nuclear
-#   option (not recommended) you can uncomment the following to ignore the entire idea folder.
-# .idea/
+    col_del1, col_del2 = st.columns([3, 1])
+    with col_del1:
+        del_idx = st.selectbox(
+            "Удалить позицию:",
+            options=range(len(meals)),
+            format_func=lambda i: f"{i+1}. {meals[i]['product']} ({meals[i]['grams']:.0f} г, {meals[i]['time']})"
+        )
+    with col_del2:
+        st.write("")
+        st.write("")
+        if st.button("🗑 Удалить", use_container_width=True):
+            del st.session_state.meals[del_idx]
+            st.rerun()
+else:
+    st.info("Дневник пуст. Добавьте первый продукт.")
 
-# Abstra
-#   Abstra is an AI-powered process automation framework.
-#   Ignore directories containing user credentials, local state, and settings.
-#   Learn more at https://abstra.io/docs
-.abstra/
+st.divider()
 
-# Visual Studio Code
-#   Visual Studio Code specific template is maintained in a separate VisualStudioCode.gitignore that
-#   can be found at https://github.com/github/gitignore/blob/main/Global/VisualStudioCode.gitignore
-#   and can be added to the global gitignore or merged into this file. However, if you prefer, you
-#   could uncomment the following to ignore the entire vscode folder
-# .vscode/
-# Temporary file for partial code execution
-tempCodeRunnerFile.py
+# ==================== РЕКОМЕНДАЦИИ ====================
+st.subheader("💡 Рекомендации (СПКЯ / ИР)")
 
-# Ruff stuff:
-.ruff_cache/
+if not meals:
+    st.info("Добавьте продукты, чтобы получить персональные рекомендации.")
+else:
+    high_gi = [m for m in meals if m["gi"] >= 70]
+    medium_gi = [m for m in meals if 56 <= m["gi"] < 70]
 
-# PyPI configuration file
-.pypirc
+    carb_pct = (total_carb * 4) / total_cal * 100 if total_cal else 0
+    prot_pct = (total_prot * 4) / total_cal * 100 if total_cal else 0
+    fat_pct = (total_fat * 9) / total_cal * 100 if total_cal else 0
 
-# Marimo
-marimo/_static/
-marimo/_lsp/
-__marimo__/
+    st.markdown("**Соотношение БЖУ по калорийности:**")
+    macro_df = pd.DataFrame({
+        "Нутриент": ["Белки", "Жиры", "Углеводы"],
+        "% от калорий": [round(prot_pct, 1), round(fat_pct, 1), round(carb_pct, 1)],
+        "Рекомендуется": ["25–30%", "30–35%", "35–45%"],
+    })
+    st.dataframe(macro_df, use_container_width=True, hide_index=True)
 
-# Streamlit
-.streamlit/secrets.toml
+    if high_gi:
+        names = ", ".join(sorted(set(m["product"] for m in high_gi)))
+        st.error(f"⚠️ **Высокий ГИ (≥70):** {names}\n\nЗамените на продукты с низким ГИ (≤55).")
+
+    if medium_gi:
+        names = ", ".join(sorted(set(m["product"] for m in medium_gi)))
+        st.warning(f"🟡 **Средний ГИ (56–69):** {names}\n\nУпотребляйте умеренно, желательно с белком или жиром.")
+
+    if not high_gi and not medium_gi:
+        st.success("✅ Все продукты в дневнике имеют низкий ГИ (≤55). Отлично для СПКЯ/ИР!")
+
+    cols = st.columns(3)
+    with cols[0]:
+        if prot_pct < 25:
+            st.warning(f"🥩 Белок {prot_pct:.0f}% — ниже нормы. Добавьте курицу, рыбу, творог, тофу.")
+        else:
+            st.success(f"✅ Белок {prot_pct:.0f}% — в норме.")
+    with cols[1]:
+        if carb_pct > 45:
+            st.warning(f"🍚 Углеводы {carb_pct:.0f}% — выше нормы. Снизьте долю круп и хлеба.")
+        else:
+            st.success(f"✅ Углеводы {carb_pct:.0f}% — в норме.")
+    with cols[2]:
+        if fat_pct < 30:
+            st.warning(f"🥑 Жиры {fat_pct:.0f}% — ниже нормы. Добавьте оливковое масло, орехи, авокадо.")
+        else:
+            st.success(f"✅ Жиры {fat_pct:.0f}% — в норме.")
+
+    with st.expander("📖 Общие советы при СПКЯ и ИР", expanded=False):
+        st.markdown("""
+        - **Выбирайте продукты с ГИ ≤55:** овощи, бобовые, цельные злаки, ягоды.
+        - **Ешьте 5–6 раз в день** небольшими порциями каждые 3–4 часа — это стабилизирует сахар в крови.
+        - **Добавьте омега-3:** лосось, сардины, семена чиа, грецкие орехи.
+        - **Ограничьте:** сахар, белый хлеб, белый рис, картофель, сладкие напитки, соки.
+        - **Комбинируйте углеводы с белком и жиром** — это снижает гликемический ответ.
+        - **Клетчатка 25–30 г в день** — овощи, отруби, семена льна, бобовые.
+        - **Движение после еды** (10–15 мин ходьбы) помогает снизить уровень глюкозы.
+        """)
